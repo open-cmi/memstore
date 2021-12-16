@@ -1,10 +1,7 @@
 package memstore
 
 import (
-	"bytes"
 	"encoding/base32"
-	"encoding/gob"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -19,7 +16,7 @@ import (
 type MemStore struct {
 	Codecs  []securecookie.Codec
 	Options *sessions.Options
-	cache   *cache
+	cache   *Cache
 }
 
 type valueType map[interface{}]interface{}
@@ -94,7 +91,7 @@ func (m *MemStore) New(r *http.Request, name string) (*sessions.Session, error) 
 	}
 
 	// Values found in session, this is not a new session
-	session.Values = m.copy(v)
+	session.Values = v
 	session.IsNew = false
 	return session, nil
 }
@@ -118,7 +115,7 @@ func (m *MemStore) Save(r *http.Request, w http.ResponseWriter, s *sessions.Sess
 			return err
 		}
 		cookieValue = encrypted
-		m.cache.setValue(s.ID, m.copy(s.Values))
+		m.cache.setValue(s.ID, s.Values)
 	}
 	http.SetCookie(w, sessions.NewCookie(s.Name(), cookieValue, s.Options))
 	return nil
@@ -138,18 +135,26 @@ func (m *MemStore) MaxAge(age int) {
 	}
 }
 
+/*
 func (m *MemStore) copy(v valueType) valueType {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	dec := gob.NewDecoder(&buf)
-	err := enc.Encode(v)
+	jv, _ := json.Marshal(v)
+	err := enc.Encode(string(jv))
 	if err != nil {
 		panic(fmt.Errorf("could not copy memstore value. Encoding to gob failed: %v", err))
 	}
+	var jvalue string
 	var value valueType
-	err = dec.Decode(&value)
+	err = dec.Decode(&jvalue)
 	if err != nil {
 		panic(fmt.Errorf("could not copy memstore value. Decoding from gob failed: %v", err))
 	}
+	err = json.Unmarshal([]byte(jvalue), &value)
+	if err != nil {
+		panic(fmt.Errorf("could not copy memstore value. unmarshal from gob failed: %v", err))
+	}
 	return value
 }
+*/

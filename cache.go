@@ -4,18 +4,18 @@ import (
 	"sync"
 )
 
-type cache struct {
-	data  map[string]valueType
+type Cache struct {
+	data  map[string]interface{}
 	mutex sync.RWMutex
 }
 
-func newCache() *cache {
-	return &cache{
-		data: make(map[string]valueType),
+func newCache() *Cache {
+	return &Cache{
+		data: make(map[string]interface{}),
 	}
 }
 
-func (c *cache) value(name string) (valueType, bool) {
+func (c *Cache) value(name string) (interface{}, bool) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
@@ -23,14 +23,14 @@ func (c *cache) value(name string) (valueType, bool) {
 	return v, ok
 }
 
-func (c *cache) setValue(name string, value valueType) {
+func (c *Cache) setValue(name string, value interface{}) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	c.data[name] = value
 }
 
-func (c *cache) delete(name string) {
+func (c *Cache) delete(name string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 

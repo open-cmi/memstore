@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/quasoft/memstore"
+	"github.com/open-cmi/memstore"
 )
 
 func main() {

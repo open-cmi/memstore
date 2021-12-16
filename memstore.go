@@ -91,7 +91,7 @@ func (m *MemStore) New(r *http.Request, name string) (*sessions.Session, error) 
 	}
 
 	// Values found in session, this is not a new session
-	session.Values = v
+	session.Values = v.(map[interface{}]interface{})
 	session.IsNew = false
 	return session, nil
 }

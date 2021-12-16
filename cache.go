@@ -5,17 +5,17 @@ import (
 )
 
 type Cache struct {
-	data  map[string]interface{}
+	data  map[string]string
 	mutex sync.RWMutex
 }
 
 func newCache() *Cache {
 	return &Cache{
-		data: make(map[string]interface{}),
+		data: make(map[string]string),
 	}
 }
 
-func (c *Cache) value(name string) (interface{}, bool) {
+func (c *Cache) value(name string) (string, bool) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
@@ -23,7 +23,7 @@ func (c *Cache) value(name string) (interface{}, bool) {
 	return v, ok
 }
 
-func (c *Cache) setValue(name string, value interface{}) {
+func (c *Cache) setValue(name string, value string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 

@@ -2,6 +2,8 @@ package memstore
 
 import (
 	"encoding/base32"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -9,14 +11,53 @@ import (
 	"github.com/gorilla/sessions"
 )
 
+// SessionSerializer provides an interface hook for alternative serializers
+type SessionSerializer interface {
+	Deserialize(d []byte, ss *sessions.Session) error
+	Serialize(ss *sessions.Session) ([]byte, error)
+}
+
+// JSONSerializer encode the session map to JSON.
+type JSONSerializer struct{}
+
+// Serialize to JSON. Will err if there are unmarshalable key values
+func (s JSONSerializer) Serialize(ss *sessions.Session) ([]byte, error) {
+	m := make(map[string]interface{}, len(ss.Values))
+	for k, v := range ss.Values {
+		ks, ok := k.(string)
+		if !ok {
+			err := fmt.Errorf("Non-string key value, cannot serialize session to JSON: %v", k)
+			fmt.Printf("redistore.JSONSerializer.serialize() Error: %v", err)
+			return nil, err
+		}
+		m[ks] = v
+	}
+	return json.Marshal(m)
+}
+
+// Deserialize back to map[string]interface{}
+func (s JSONSerializer) Deserialize(d []byte, ss *sessions.Session) error {
+	m := make(map[string]interface{})
+	err := json.Unmarshal(d, &m)
+	if err != nil {
+		fmt.Printf("redistore.JSONSerializer.deserialize() Error: %v", err)
+		return err
+	}
+	for k, v := range m {
+		ss.Values[k] = v
+	}
+	return nil
+}
+
 // MemStore is an in-memory implementation of gorilla/sessions, suitable
 // for use in tests and development environments. Do not use in production.
 // Values are cached in a map. The cache is protected and can be used by
 // multiple goroutines.
 type MemStore struct {
-	Codecs  []securecookie.Codec
-	Options *sessions.Options
-	cache   *Cache
+	Codecs     []securecookie.Codec
+	Options    *sessions.Options
+	cache      *Cache
+	serializer SessionSerializer
 }
 
 type valueType map[interface{}]interface{}
@@ -43,7 +84,8 @@ func NewMemStore(keyPairs ...[]byte) *MemStore {
 			Path:   "/",
 			MaxAge: 86400 * 30,
 		},
-		cache: newCache(),
+		cache:      newCache(),
+		serializer: JSONSerializer{},
 	}
 	store.MaxAge(store.Options.MaxAge)
 	return &store
@@ -90,10 +132,13 @@ func (m *MemStore) New(r *http.Request, name string) (*sessions.Session, error) 
 		return session, nil
 	}
 
+	err = m.serializer.Deserialize([]byte(v), session)
+	if err != nil {
+		panic(fmt.Errorf("could not deserializer session value. Encoding to json failed: %v", err))
+	}
 	// Values found in session, this is not a new session
-	session.Values = v.(map[interface{}]interface{})
 	session.IsNew = false
-	return session, nil
+	return session, err
 }
 
 // Save adds a single session to the response.
@@ -115,7 +160,11 @@ func (m *MemStore) Save(r *http.Request, w http.ResponseWriter, s *sessions.Sess
 			return err
 		}
 		cookieValue = encrypted
-		m.cache.setValue(s.ID, s.Values)
+		serializerValue, err := m.serializer.Serialize(s)
+		if err != nil {
+			panic(fmt.Errorf("could not serializer memstore value. Encoding to json failed: %v", err))
+		}
+		m.cache.setValue(s.ID, string(serializerValue))
 	}
 	http.SetCookie(w, sessions.NewCookie(s.Name(), cookieValue, s.Options))
 	return nil
@@ -134,27 +183,3 @@ func (m *MemStore) MaxAge(age int) {
 		}
 	}
 }
-
-/*
-func (m *MemStore) copy(v valueType) valueType {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	dec := gob.NewDecoder(&buf)
-	jv, _ := json.Marshal(v)
-	err := enc.Encode(string(jv))
-	if err != nil {
-		panic(fmt.Errorf("could not copy memstore value. Encoding to gob failed: %v", err))
-	}
-	var jvalue string
-	var value valueType
-	err = dec.Decode(&jvalue)
-	if err != nil {
-		panic(fmt.Errorf("could not copy memstore value. Decoding from gob failed: %v", err))
-	}
-	err = json.Unmarshal([]byte(jvalue), &value)
-	if err != nil {
-		panic(fmt.Errorf("could not copy memstore value. unmarshal from gob failed: %v", err))
-	}
-	return value
-}
-*/
